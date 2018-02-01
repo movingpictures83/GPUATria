@@ -49,3 +49,4 @@ __global__ void _GPU_Spots_kernel(int* S, int GSIZE);
 //__constant__ int _GPU_2GSIZE;
 
 #endif
+
