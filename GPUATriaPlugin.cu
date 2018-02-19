@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <math.h>
+#include "PluMA.h"
 #include "PluginManager.h"
 #include "GPUATriaPlugin.h"
 #include <cuda.h>
@@ -41,7 +42,7 @@ void GPUATriaPlugin::input(std::string file) {
 //const int NumBytes=(GSIZE*2)*(GSIZE*2)*sizeof(float);
                 //host allocations to create Adjancency matrix and result matrices with path matrices
                 //OrigGraph=(float *)malloc(NumBytes);//will be original Adjancency matrix, will NOT be changed
-
+ 
                 const char field_terminator = ',';
                 const char line_terminator  = '\n';
                 const char enclosure_char   = '"';
@@ -159,19 +160,13 @@ void GPUATriaPlugin::run() {
          const int _2GSIZE = 2*GSIZE;
                 H_pay = (float *)malloc(NumBytesPay);
          U.resize(GSIZE, 0.0);
-	 printf("GPU Global Memory Allocation...\n");
+	 PluginManager::log("GPU Global Memory Allocation...");
          /////////////////////////////////////////////////////////////////////
          // GPU Memory Allocation
 	 cudaErrorCheck(cudaMalloc((float **)&dG,NumBytes));
 	 cudaErrorCheck(cudaMalloc((float **)&dTable, NumBytes));
          cudaErrorCheck(cudaMalloc((float**)&dPay,NumBytesPay));
          cudaErrorCheck(cudaMalloc((int**)&dSpots, GSIZE*2*GSIZE*2*sizeof(int)));
-	 /*printf("GPU Constant Memory Allocation I...\n");
-         cudaErrorCheck(cudaMemcpyToSymbol(&_GPU_GSIZE, &GSIZE, sizeof(int)));
-	 printf("GPU Constant Memory Allocation II...\n");
-         cudaErrorCheck(cudaMemcpyToSymbol(&_GPU_2GSIZE, &_2GSIZE, sizeof(int)));
-	 printf("GPU Constant Memory Allocation Done.\n");
-         *///cudaErrorCheck(cudaMalloc((char**)&dMark, NumBytes*(GSIZE*2)*sizeof(char)));
 	 dim3 pathThreads((GSIZE*2+BLOCK_SIZE-1)/BLOCK_SIZE,GSIZE*2);
 	 //dim3 pathThreads((GSIZE*GSIZE*2*2+BLOCK_SIZE-1)/BLOCK_SIZE,GSIZE*2);
          dim3 payThreads((GSIZE+BLOCK_SIZE-1)/BLOCK_SIZE);
@@ -186,26 +181,21 @@ void GPUATriaPlugin::run() {
 
 	 free(OrigGraph);
 
-         printf("Done.\n");
-         printf("Computing Spots...\n");
+         PluginManager::log("Done.");
+         PluginManager::log("Computing Spots...");
          _GPU_Spots_kernel<<<spotThreads, BLOCK_SIZE>>>(dSpots, GSIZE);
          cudaErrorCheck(cudaGetLastError()); 
          cudaErrorCheck(cudaThreadSynchronize());
-         printf("Done.\n");
+         PluginManager::log("Done.");
          for (int a = 0; a < GSIZE; a++) {
 
                 ///////////////////////////////////////////////////////////////////////////////////////////
                 // GPU Floyd Algorithm
 		_GPU_Copy_kernel<<<copyThreads, BLOCK_SIZE>>>(dTable, dG, GSIZE*2*(GSIZE+1)); 
-		//printf("After\n");
                 cudaErrorCheck(cudaGetLastError());
-		//printf("Flushing\n");
-                //fflush(stdout);
-		//printf("Synchronizing\n");
 		cudaErrorCheck(cudaThreadSynchronize());
                 // Note: k is the node you are going *through*.  Not the start node.
 	        for(set<int>::iterator k=ks.begin();k!=ks.end();k++){//main loop
-                   //printf("K: %d\n", *k);
 		   _GPU_Floyd_kernel<<<pathThreads,BLOCK_SIZE>>>(*k,dTable,dSpots,/*dW,*//*dP*/dMark,_2GSIZE,a, _2GSIZE);
                    cudaErrorCheck(cudaGetLastError());
 		   cudaErrorCheck(cudaThreadSynchronize());
@@ -223,7 +213,7 @@ void GPUATriaPlugin::run() {
                       maxpay = abs(H_pay[i]);
                    }
                 }
-                cout << "Node with highest pay: " << bacteria[maxnode] << ": " << H_pay[maxnode] << endl;
+                PluginManager::log(std::string("Node with highest pay: "+bacteria[maxnode]+": "+std::to_string(H_pay[maxnode])));
 		if (maxpay == 0.5) break;
                 U[maxnode] = H_pay[maxnode];
                 if (maxpay == 0)
@@ -288,12 +278,9 @@ for (int i = GSIZE-1; i >= 0; i--)
 
 
 __global__ void _GPU_Copy_kernel(float* dst, float* src, unsigned long N) {
-   //printf("Hello!!!\n");
    //unsigned long threadNum = blockIdx.x*gridDim.y*blockDim.x + blockIdx.y*blockDim.x + threadIdx.x;
    unsigned long threadNum = blockIdx.x*blockDim.x + threadIdx.x;
-   //printf("Thread Num\n");
    if (threadNum >= N) return;
-   //printf("%d %d %f\n", blockIdx.x, threadIdx.x, src[threadNum]);
    dst[threadNum] = src[threadNum];
 }
 
@@ -336,7 +323,6 @@ __global__ void _GPU_Triad_kernel(float* G, int maxnode, int GSIZE) {
       bac2 = maxnode;
    }
    maxnode_i = 2*(2*GSIZE*bac1 - bac1*(bac1-1)) + 2*(bac2-bac1)   + (k/4)*(2*(GSIZE-bac1)) + (k/2)%2;
-   //printf("Thread %d: i=%d maxnode=%d edge=%d\n", k, i, maxnode, maxnode_i); 
    
    bac1 = maxnode;
    bac2 = j;
@@ -351,7 +337,6 @@ __global__ void _GPU_Triad_kernel(float* G, int maxnode, int GSIZE) {
    bac1 = i;
    bac2 = j;
    i_j = 2*(2*GSIZE*bac1 - bac1*(bac1-1)) + 2*(bac2-bac1)  + ((k/2)%2)*(2*(GSIZE-bac1)) + (k%2);
-   //printf("Thread %d: i=%d j=%d edge=%d\n", k, i, j, i_j); 
    
    float G_mi = G[maxnode_i];
    float G_mj = G[maxnode_j];
