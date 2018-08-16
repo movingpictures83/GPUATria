@@ -1,0 +1,2 @@
+Prefix plugins/GPUATria/example/
+Plugin GPUATria inputfile corrP.never.csv outputfile corrP.never.GPUATria.noa
