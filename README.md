@@ -2,7 +2,7 @@
 # Language: CUDA
 # Input: CSV (network)
 # Output: NOA (central nodes and centrality values)
-# Tested with: PluMA 1.0, CUDA 7.5
+# Tested with: PluMA 1.1, CUDA 10
 
 PluMA plugin to run the Ablatio Triadum (ATria, Cickovski et al 2015, 2017) algorithm on the GPU.
 ATria can find the most important or central nodes in a signed and weighted network.
