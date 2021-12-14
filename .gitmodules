@@ -1,0 +1,3 @@
+[submodule "csv_parser"]
+	path = csv_parser
+	url = https://github.com/movingpictures83/csv_parser
