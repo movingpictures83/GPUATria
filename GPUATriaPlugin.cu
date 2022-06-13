@@ -10,6 +10,13 @@
 #include "device_launch_parameters.h"
 #include "csv_parser/csv_parser.cpp"
 
+bool floatComp(float A, float B) {
+   float EPSILON=1e-7;
+   float diff = A - B;
+   return (diff < EPSILON) && (-diff < EPSILON);
+}
+
+
 GPUATriaPlugin::~GPUATriaPlugin() {
    if (OrigGraph) free(OrigGraph);
    if (bacteria) delete bacteria;
@@ -180,7 +187,7 @@ void GPUATriaPlugin::run() {
 	 cudaErrorCheck(cudaMemcpy(dG,OrigGraph,NumBytes,_HTD));
 
 	 free(OrigGraph);
-
+         int currentrank=1;
          PluginManager::log("Done.");
          PluginManager::log("Computing Spots...");
          _GPU_Spots_kernel<<<spotThreads, BLOCK_SIZE>>>(dSpots, GSIZE);
@@ -205,19 +212,30 @@ void GPUATriaPlugin::run() {
                 cudaErrorCheck(cudaGetLastError());
 	        cudaErrorCheck(cudaMemcpy(H_pay,dPay,NumBytesPay,_DTH));
                 ////////////////////////////////////////////////////////////////////////////////////////
-                int maxnode = -1;
+                vector<int> maxnodes;
+		int mnode = -1;
                 float maxpay = -1;
                 for (int i = 0; i < GSIZE; i++) {
-                   if (abs(H_pay[i]) > maxpay) {
-                      maxnode = i;
-                      maxpay = abs(H_pay[i]);
+                   if (fabs(H_pay[i]) > maxpay) {
+                      mnode = i;
+                      maxpay = fabs(H_pay[i]);
                    }
                 }
-                PluginManager::log(std::string("Node with highest pay: "+bacteria[maxnode]+": "+std::to_string(H_pay[maxnode])));
-		if (maxpay == 0.5) break;
-                U[maxnode] = H_pay[maxnode];
+		//if (maxpay == 0.5) break;
+                //U[mnode] = H_pay[mnode];
+		maxnodes.push_back(mnode);
+		for (int i = 0; i < GSIZE; i++) {
+                   //if ((i != mnode) && fabs(H_pay[i]) == maxpay) {
+                   if ((i != mnode) && floatComp(fabs(H_pay[i]), maxpay)) {
+                      maxnodes.push_back(i);
+	           }
+		}
                 if (maxpay == 0)
                    break;
+		for (int w = 0; w < maxnodes.size(); w++) {
+                        int maxnode = maxnodes[w];
+                PluginManager::log(std::string("Node with highest pay: "+bacteria[maxnode]+": "+std::to_string(H_pay[maxnode])));
+                U[maxnode] = currentrank;//H_pay[maxnode];
 		ks.erase(maxnode*2);
 		ks.erase(maxnode*2+1);
 		//cudaErrorCheck(cudaThreadSynchronize());
@@ -230,6 +248,9 @@ void GPUATriaPlugin::run() {
 		_GPU_Sweep_kernel<<<sweepThreads, BLOCK_SIZE>>>(dG, GSIZE*2*(GSIZE+1));
                 cudaErrorCheck(cudaGetLastError());
 		cudaErrorCheck(cudaThreadSynchronize());
+		}
+		currentrank += maxnodes.size();
+
            }
         free(H_pay);
 
@@ -249,6 +270,17 @@ void GPUATriaPlugin::run() {
 void GPUATriaPlugin::output(std::string file) {
 for (int i = GSIZE-1; i >= 0; i--)
            for (int j = 0; j < i; j++) {
+              if (fabs(U[j]) > fabs(U[j+1])) {
+                 float tmp = U[j];
+                 U[j] = U[j+1];
+                 U[j+1] = tmp;
+                 string tmp2 = bacteria[j];
+                 bacteria[j] = bacteria[j+1];
+                 bacteria[j+1] = tmp2;
+              }
+           }
+/*for (int i = GSIZE-1; i >= 0; i--)
+           for (int j = 0; j < i; j++) {
               if (fabs(U[j]) < fabs(U[j+1])) {
                  float tmp = U[j];
                  U[j] = U[j+1];
@@ -258,8 +290,25 @@ for (int i = GSIZE-1; i >= 0; i--)
                  bacteria[j+1] = tmp2;
               }
            }
-
+*/
         std::ofstream noafile(file.c_str(), std::ios::out);
+        //noafile << "Name\tCentrality\tRank" << endl;
+        noafile << "Name\tCentrality\tRank" << endl;
+        float min = 0;
+        float max = 0;
+        for (int i = 0; i < GSIZE; i++) {
+           /*U[i] = fabs(U[i]);
+           if (fabs(U[i]) > max)
+              max = fabs(U[i]);
+           if (fabs(U[i]) < min)
+              min = fabs(U[i]);*/
+           //noafile << bacteria[i] << "\t" << U[i] << "\t\t" << GSIZE-i << endl;
+	   if (U[i] != 0)
+           noafile << bacteria[i] << "\t" << "#" << U[i] << " " << bacteria[i] << "\t" << U[i] << endl;
+	   else
+           noafile << bacteria[i] << "\t" << bacteria[i] << "\t" << "NR" << endl;
+        }
+        /*std::ofstream noafile(file.c_str(), std::ios::out);
         noafile << "Name\tCentrality\tRank" << endl;
         float min = 0;
         float max = 0;
@@ -270,7 +319,7 @@ for (int i = GSIZE-1; i >= 0; i--)
            if (fabs(U[i]) < min)
               min = fabs(U[i]);
            noafile << bacteria[i] << "\t" << U[i] << "\t\t" << GSIZE-i << endl;
-        }
+        }*/
 
 }
 
