@@ -2,7 +2,6 @@
 #include <iostream>
 #include <fstream>
 #include <math.h>
-#include "PluMA.h"
 #include "PluginManager.h"
 #include "GPUATriaPlugin.h"
 #include <cuda.h>
@@ -21,7 +20,7 @@ GPUATriaPlugin::~GPUATriaPlugin() {
    if (OrigGraph) free(OrigGraph);
    if (bacteria) delete bacteria;
    if (H_pay) free(H_pay);
-   
+
 }
 
 
@@ -31,10 +30,10 @@ void GPUATriaPlugin::getIndices(int bac1, int bac2, unsigned long* pos_pos, unsi
 		bac1 = bac2;
 		bac2 = tmp;
          }
- 
+
 				 unsigned long row_pos = 2*(2*GSIZE*bac1 - bac1*(bac1-1));
 				 unsigned long row_neg = row_pos + 2*(GSIZE-bac1);;
-                                 
+
                                  *pos_pos = row_pos + 2*(bac2-bac1);
                                  *pos_neg = *pos_pos + 1;
                                  *neg_pos = row_neg + 2*(bac2-bac1);
@@ -49,7 +48,7 @@ void GPUATriaPlugin::input(std::string file) {
 //const int NumBytes=(GSIZE*2)*(GSIZE*2)*sizeof(float);
                 //host allocations to create Adjancency matrix and result matrices with path matrices
                 //OrigGraph=(float *)malloc(NumBytes);//will be original Adjancency matrix, will NOT be changed
- 
+
                 const char field_terminator = ',';
                 const char line_terminator  = '\n';
                 const char enclosure_char   = '"';
@@ -157,7 +156,7 @@ void GPUATriaPlugin::input(std::string file) {
                         }
                         row_count++;
                 }*/
-  
+
 
 }
 
@@ -191,14 +190,14 @@ void GPUATriaPlugin::run() {
          PluginManager::log("Done.");
          PluginManager::log("Computing Spots...");
          _GPU_Spots_kernel<<<spotThreads, BLOCK_SIZE>>>(dSpots, GSIZE);
-         cudaErrorCheck(cudaGetLastError()); 
+         cudaErrorCheck(cudaGetLastError());
          cudaErrorCheck(cudaThreadSynchronize());
          PluginManager::log("Done.");
          for (int a = 0; a < GSIZE; a++) {
 
                 ///////////////////////////////////////////////////////////////////////////////////////////
                 // GPU Floyd Algorithm
-		_GPU_Copy_kernel<<<copyThreads, BLOCK_SIZE>>>(dTable, dG, GSIZE*2*(GSIZE+1)); 
+		_GPU_Copy_kernel<<<copyThreads, BLOCK_SIZE>>>(dTable, dG, GSIZE*2*(GSIZE+1));
                 cudaErrorCheck(cudaGetLastError());
 		cudaErrorCheck(cudaThreadSynchronize());
                 // Note: k is the node you are going *through*.  Not the start node.
@@ -259,7 +258,7 @@ void GPUATriaPlugin::run() {
 	cudaErrorCheck(cudaFree(dG));
 	cudaErrorCheck(cudaFree(dTable));
 	cudaErrorCheck(cudaFree(dPay));
-       
+
         /////////////////////////////////////////////////////////////
 
 }
@@ -363,7 +362,7 @@ __global__ void _GPU_Triad_kernel(float* G, int maxnode, int GSIZE) {
    int j = offset / 8;
    if (i >= j || maxnode == i || maxnode == j) return;
    int k = offset % 8;
- 
+
    int bac1 = maxnode;
    int bac2 = i;
    unsigned long maxnode_i, maxnode_j, i_j;
@@ -372,7 +371,7 @@ __global__ void _GPU_Triad_kernel(float* G, int maxnode, int GSIZE) {
       bac2 = maxnode;
    }
    maxnode_i = 2*(2*GSIZE*bac1 - bac1*(bac1-1)) + 2*(bac2-bac1)   + (k/4)*(2*(GSIZE-bac1)) + (k/2)%2;
-   
+
    bac1 = maxnode;
    bac2 = j;
    if (maxnode > j) {
@@ -386,7 +385,7 @@ __global__ void _GPU_Triad_kernel(float* G, int maxnode, int GSIZE) {
    bac1 = i;
    bac2 = j;
    i_j = 2*(2*GSIZE*bac1 - bac1*(bac1-1)) + 2*(bac2-bac1)  + ((k/2)%2)*(2*(GSIZE-bac1)) + (k%2);
-   
+
    float G_mi = G[maxnode_i];
    float G_mj = G[maxnode_j];
    float G_ij = G[i_j];
@@ -398,7 +397,7 @@ __global__ void _GPU_Triad_kernel(float* G, int maxnode, int GSIZE) {
    if (edgeMaxI && edgeMaxJ  &&
        G_ij != 0) {
       G[maxnode_i] = 2;
-      G[maxnode_j] = 2; 
+      G[maxnode_j] = 2;
       G[i_j] = 2;
    }
    else {
@@ -410,7 +409,7 @@ __global__ void _GPU_Triad_kernel(float* G, int maxnode, int GSIZE) {
 __global__ void _GPU_Sweep_kernel(float* G, int N) {
    unsigned long threadNum = blockIdx.x*blockDim.x + threadIdx.x;
    if (threadNum > N) return;
-   
+
    if (G[threadNum] == 2) G[threadNum] = 0;
 }
 
@@ -433,7 +432,7 @@ __global__ void _GPU_Spots_kernel(int* spots, int GSIZE) {
    int bac1 = blockIdx.y;
    int bac2 = blockIdx.x*blockDim.x + threadIdx.x;
    if (bac1 >= GSIZE*2 || bac2 >= GSIZE*2) return;
- 
+
     int b1 = bac1 >> 1;
     int b2 = bac2 >> 1;
     if (b1 > b2) {
@@ -442,7 +441,7 @@ __global__ void _GPU_Spots_kernel(int* spots, int GSIZE) {
         b2 = tmp;
     }
     spots[bac1*GSIZE*2+bac2] = (((GSIZE<<1)*b1 - b1*(b1-1))<<1) + (bac1%2)*((GSIZE-b1)<<1) + ((b2-b1)<<1) + (bac2%2);
-  
+
 }
 
 // Way this works:
@@ -454,13 +453,13 @@ __global__ void _GPU_Floyd_kernel(const int k, float *G, const int* __restrict__
         int _2iGSIZE = i*_2GSIZE;
         int GSIZE = _2iGSIZE >> 1;
 	unsigned long idx=spots[_2iGSIZE+j];/*getSpot(i, j,GSIZE);*/ // Spot for (i, j)
-        
+
 	if(i >= j || j>=N || j == k /*|| (first != 0 && mark[markid] == 0)*/)return; // If j is out of bounds, return
 
         float best = G[spots[_2iGSIZE+k]];
 	if(best==0)return; // Because, we use best.
         float tmp_b=G[spots[k*_2GSIZE+j]];//G[getSpot(k, j)];  // Path from k to j
-	if(tmp_b==0)return; // If this is zero, no path, return	
+	if(tmp_b==0)return; // If this is zero, no path, return
 	float cur=best*tmp_b; // New path from i to j is the best path from i to k times the path from k to j
         // If the shortest path from i to j THROUGH this k is better
         // than all k's so far, replace
